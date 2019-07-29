@@ -177,6 +177,15 @@ jobs:
       - checkout
       - run: sudo apt-get update && sudo apt-get install -y gcc-arm-linux-gnueabi gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
       - run:
+          name: set build environment variables
+          command: |
+            echo 'export GIT_COMMIT=$(git rev-parse --short HEAD)' >> $BASH_ENV
+            echo 'export GIT_DIRTY=$(test -n "`git status --porcelain`" && echo "+CHANGES" || true)' >> $BASH_ENV
+            echo 'export GIT_DESCRIBE=$(git describe --tags --always --match "v*")' >> $BASH_ENV
+            echo 'export GIT_IMPORT=github.com/hashicorp/consul/version' >> $BASH_ENV
+            echo 'export GOLDFLAGS="-X ${GIT_IMPORT}.GitCommit=${GIT_COMMIT}${GIT_DIRTY} -X ${GIT_IMPORT}.GitDescribe=${GIT_DESCRIBE}"' >> $BASH_ENV
+
+      - run:
           environment:
             GOARM: 5
             CC: arm-linux-gnueabi-gcc
