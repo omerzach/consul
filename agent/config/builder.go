@@ -1347,14 +1347,6 @@ func (b *Builder) serviceConnectVal(v *ServiceConnect) *structs.ServiceConnect {
 		return nil
 	}
 
-	var proxy *structs.ServiceDefinitionConnectProxy
-	if v.Proxy != nil {
-		proxy = &structs.ServiceDefinitionConnectProxy{
-			Config:    v.Proxy.Config,
-			Upstreams: b.upstreamsVal(v.Proxy.Upstreams),
-		}
-	}
-
 	sidecar := b.serviceVal(v.SidecarService)
 	if sidecar != nil {
 		// Sanity checks
@@ -1372,7 +1364,6 @@ func (b *Builder) serviceConnectVal(v *ServiceConnect) *structs.ServiceConnect {
 
 	return &structs.ServiceConnect{
 		Native:         b.boolVal(v.Native),
-		Proxy:          proxy,
 		SidecarService: sidecar,
 	}
 }
