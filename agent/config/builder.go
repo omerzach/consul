@@ -805,8 +805,6 @@ func (b *Builder) Build() (rt RuntimeConfig, err error) {
 		ConnectEnabled:                   connectEnabled,
 		ConnectCAProvider:                connectCAProvider,
 		ConnectCAConfig:                  connectCAConfig,
-		ConnectProxyBindMinPort:          proxyMinPort,
-		ConnectProxyBindMaxPort:          proxyMaxPort,
 		ConnectSidecarMinPort:            sidecarMinPort,
 		ConnectSidecarMaxPort:            sidecarMaxPort,
 		DataDir:                          b.stringVal(c.DataDir),
