@@ -5969,7 +5969,6 @@ func TestSanitize(t *testing.T) {
 			"Name": "foo",
 			"Port": 0,
 			"Proxy": null,
-			"ProxyDestination": "",
 			"TaggedAddresses": {},
 			"Tags": [],
 			"Token": "hidden",
