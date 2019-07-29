@@ -167,12 +167,34 @@ jobs:
       XC_ARCH: "amd64"
 
   # build all arm/arm64 architecture supported OS binaries
-  build-arm-arm64:
-    <<: *build-distros
+  build-arm:
+    docker:
+      - image: *GOLANG_IMAGE
     environment:
-      <<: *build-env
-      XC_OS: linux
-      XC_ARCH: "arm arm64"
+      CGO_ENABLED: 1
+      GOOS: linux
+    steps:
+      - checkout
+      - run: sudo apt-get update && sudo apt-get install -y gcc-arm-linux-gnueabi gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+      - run:
+          environment:
+            GOARM: 5
+            CC: arm-linux-gnueabi-gcc
+            GOARCH: arm
+          command: go build -o ./pkg/bin/armel/consul
+      - run:
+          environment:
+            GOARM: 6
+            CC: arm-linux-gnueabihf-gcc
+            GOARCH: arm
+          command: go build -o ./pkg/bin/armhf/consul
+      - run:
+          environment:
+            CC: aarch64-linux-gnu-gcc
+            GOARCH: arm64
+          command: go build -o ./pkg/bin/aarch64/consul
+      - store_artifacts:
+          path: ./pkg/bin
 
   # create a development build
   dev-build:
@@ -475,76 +497,79 @@ jobs:
 
 workflows:
   version: 2
-  go-tests:
-    jobs:
-      - check-vendor
-      - lint-consul-retry
-      - go-fmt-and-vet:
-          requires:
-            - check-vendor
-      - dev-build:
-          requires:
-            - go-fmt-and-vet
-      - go-test: &go-test
-          requires:
-            - dev-build
-      - go-test-api: *go-test
+  # go-tests:
+  #   jobs:
+  #     - check-vendor
+  #     - lint-consul-retry
+  #     - go-fmt-and-vet:
+  #         requires:
+  #           - check-vendor
+  #     - dev-build:
+  #         requires:
+  #           - go-fmt-and-vet
+  #     - go-test: &go-test
+  #         requires:
+  #           - dev-build
+  #     - go-test-api: *go-test
   build-distros:
     jobs:
-      - build-386
-      - build-amd64
-      - build-arm-arm64
-  test-integrations:
-    jobs:
-      - dev-build
-      - dev-upload-s3: &dev-upload
-          requires:
-            - dev-build
-          filters:
-            branches:
-              ignore:
-                - /^pull\/.*$/ # only push dev builds from non forks
-      - dev-upload-docker:
-          <<: *dev-upload
-          context: consul-ci
-      - nomad-integration-master:
-          requires:
-            - dev-build
-      - nomad-integration-0_8:
-          requires:
-            - dev-build
-      - envoy-integration-test-1.8.0:
-          requires:
-            - dev-build
-      - envoy-integration-test-1.9.1:
-          requires:
-            - dev-build
-      - envoy-integration-test-1.10.0:
-          requires:
-            - dev-build
-  website:
-    jobs:
-      - build-website
-      - docs-link-checker:
-          requires:
-            - build-website
-          filters:
-            branches:
-              ignore:
-                - /^pull\/.*$/ # only run link checker on non forks
-      - deploy-website:
-          requires:
-            - docs-link-checker
-          context: static-sites
-          filters:
-            branches:
-              only: stable-website
-  frontend:
-    jobs:
-      - frontend-cache
-      - ember-build:
-          requires:
-            - frontend-cache
-      - ember-test:
-          requires:
-            - ember-build
+      - build-arm
+  # build-distros:
+  #   jobs:
+  #     - build-386
+  #     - build-amd64
+  #     - build-arm-arm64
+  # test-integrations:
+  #   jobs:
+  #     - dev-build
+  #     - dev-upload-s3: &dev-upload
+  #         requires:
+  #           - dev-build
+  #         filters:
+  #           branches:
+  #             ignore:
+  #               - /^pull\/.*$/ # only push dev builds from non forks
+  #     - dev-upload-docker:
+  #         <<: *dev-upload
+  #         context: consul-ci
+  #     - nomad-integration-master:
+  #         requires:
+  #           - dev-build
+  #     - nomad-integration-0_8:
+  #         requires:
+  #           - dev-build
+  #     - envoy-integration-test-1.8.0:
+  #         requires:
+  #           - dev-build
+  #     - envoy-integration-test-1.9.1:
+  #         requires:
+  #           - dev-build
+  #     - envoy-integration-test-1.10.0:
+  #         requires:
+  #           - dev-build
+  # website:
+  #   jobs:
+  #     - build-website
+  #     - docs-link-checker:
+  #         requires:
+  #           - build-website
+  #         filters:
+  #           branches:
+  #             ignore:
+  #               - /^pull\/.*$/ # only run link checker on non forks
+  #     - deploy-website:
+  #         requires:
+  #           - docs-link-checker
+  #         context: static-sites
+  #         filters:
+  #           branches:
+  #             only: stable-website
+  # frontend:
+  #   jobs:
+  #     - frontend-cache
+  #     - ember-build:
+  #         requires:
+  #           - frontend-cache
+  #     - ember-test:
+  #         requires:
+  #           - ember-build
