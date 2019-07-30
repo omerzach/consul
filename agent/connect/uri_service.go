@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/consul/agent/structs"
 )
 
+// todo: rename as SpiffeIDConsulService
 // SpiffeIDService is the structure to represent the SPIFFE ID for a service.
 type SpiffeIDService struct {
 	Host       string

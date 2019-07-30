@@ -291,6 +291,7 @@ func (s *Intention) Check(
 			Namespace: query.SourceNS,
 			Service:   query.SourceName,
 		}
+		// todo: add our case
 
 	default:
 		return fmt.Errorf("unsupported SourceType: %q", query.SourceType)

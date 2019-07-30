@@ -155,11 +155,12 @@ func (x *Intention) Validate() error {
 			"Action must be set to 'allow' or 'deny'"))
 	}
 
-	switch x.SourceType {
-	case IntentionSourceConsul:
-	default:
+	if x.SourceType == IntentionSourceExternalTrustDomain ||
+		x.SourceType == IntentionSourceExternalURI {
 		result = multierror.Append(result, fmt.Errorf(
-			"SourceType must be set to 'consul'"))
+			"SourceTypes %s and %s are only supported in Consul Enterprise",
+			IntentionSourceExternalTrustDomain,
+			IntentionSourceExternalURI))
 	}
 
 	return result
@@ -252,6 +253,16 @@ type IntentionSourceType string
 const (
 	// IntentionSourceConsul is a service within the Consul catalog.
 	IntentionSourceConsul IntentionSourceType = "consul"
+
+	// IntentionSourceExternalTrustDomain is a service whose identity is not provided
+	// by Connect and will present a SPIFFE ID whose trust domain (i.e. hostname)
+	// is the same as that set in the intention's SourceName.
+	IntentionSourceExternalTrustDomain IntentionSourceType = "external-trust-domain"
+
+	// IntentionSourceExternalURI is a service whose identity is not provided
+	// by Connect and will present a SPIFFE ID equal to the ID set in the
+	// intention's SourceName.
+	IntentionSourceExternalURI IntentionSourceType = "external-uri"
 )
 
 // Intentions is a list of intentions.

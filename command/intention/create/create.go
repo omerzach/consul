@@ -30,6 +30,7 @@ type cmd struct {
 	flagDeny    bool
 	flagFile    bool
 	flagReplace bool
+	flagSourceType string
 	flagMeta    map[string]string
 
 	// testStdin is the input for testing.
@@ -46,6 +47,15 @@ func (c *cmd) init() {
 		"Read intention data from one or more files.")
 	c.flags.BoolVar(&c.flagReplace, "replace", false,
 		"Replace matching intentions.")
+	c.flags.StringVar(&c.flagSourceType, "src-type", "consul",
+		"Specifies the type of SRC. One of consul (default), ext-uri or "+
+	"ext-trust-domain. ext-uri and ext-trust-domain are only supported "+
+	"in Consul Enterprise. ext-uri or ext-trust-domain should be used "+
+	"when SRC is a service whose identity is not provided by the "+
+	"Connect CA. If set to ext-uri, SRC must be a full SPIFFE ID, "+
+		"ex. 'spiffe://trust.domain/path'. If set to ext-trust-domain, "+
+	"SRC must be a SPIFFE ID with only the trust domain, ex. "+
+	"'spiffe://trust.domain'.")
 	c.flags.Var((*flags.FlagMapValue)(&c.flagMeta), "meta",
 		"Metadata to set on the intention, formatted as key=value. This flag "+
 			"may be specified multiple times to set multiple meta fields.")
@@ -149,10 +159,24 @@ func (c *cmd) ixnsFromArgs(args []string) ([]*api.Intention, error) {
 		return nil, fmt.Errorf("Must specify two arguments: source and destination")
 	}
 
+	var srcType  api.IntentionSourceType
+	switch c.flagSourceType {
+	case consulSrcType:
+		srcType = api.IntentionSourceConsul
+	case extTrustDomainSrcType:
+		srcType = api.IntentionSourceExternalTrustDomain
+	case extURISrcType:
+		srcType = api.IntentionSourceExternalURI
+	default:
+		// todo: figure out how we usually print errors like this
+		return nil, fmt.Errorf("-src-type must be set to %s, %s or %s",
+			consulSrcType, extTrustDomainSrcType, extURISrcType)
+	}
+
 	return []*api.Intention{&api.Intention{
 		SourceName:      args[0],
 		DestinationName: args[1],
-		SourceType:      api.IntentionSourceConsul,
+		SourceType:      srcType,
 		Action:          c.ixnAction(),
 		Meta:            c.flagMeta,
 	}}, nil
@@ -226,3 +250,7 @@ Usage: consul intention create [options] -file FILE...
 
   Additional flags and more advanced use cases are detailed below.
 `
+// todo: figure out where these normally go
+const consulSrcType = "consul"
+const extURISrcType = "ext-uri"
+const extTrustDomainSrcType = "ext-trust-domain"

@@ -45,8 +45,9 @@ func (a *Agent) ConnectAuthorize(token string,
 		return returnErr(BadRequestError{"ClientCertURI not a valid Connect identifier"})
 	}
 
-	uriService, ok := uri.(*connect.SpiffeIDService)
-	if !ok {
+	consulURI, isConsulURI := uri.(*connect.SpiffeIDService)
+	extURI, isExtURI := uri.(*connect.SpiffeIDExtService)
+	if !isConsulURI && !isExtURI {
 		return returnErr(BadRequestError{"ClientCertURI not a valid Service identifier"})
 	}
 
@@ -96,7 +97,15 @@ func (a *Agent) ConnectAuthorize(token string,
 
 	// Test the authorization for each match
 	for _, ixn := range reply.Matches[0] {
-		if auth, ok := uriService.Authorize(ixn); ok {
+		var auth, ixnMatches bool
+
+		if ixn.SourceType == structs.IntentionSourceConsul && isConsulURI {
+			auth, ixnMatches = consulURI.Authorize(ixn)
+		} else if ixn.SourceType != structs.IntentionSourceConsul && isExtURI {
+			auth, ixnMatches = extURI.Authorize(ixn)
+		}
+
+		if ixnMatches {
 			reason = fmt.Sprintf("Matched intention: %s", ixn.String())
 			return auth, reason, &meta, nil
 		}
