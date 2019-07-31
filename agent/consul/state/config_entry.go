@@ -450,6 +450,7 @@ func (s *Store) testCompileDiscoveryChain(
 		ServiceName:       chainName,
 		CurrentNamespace:  "default",
 		CurrentDatacenter: "dc1",
+		UseInDatacenter:   "dc1",
 		Entries:           speculativeEntries,
 	}
 	_, err = discoverychain.Compile(req)

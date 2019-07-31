@@ -157,6 +157,45 @@ func TestUpstreamNodes(t testing.T) structs.CheckServiceNodes {
 	}
 }
 
+func TestUpstreamNodesInStatus(t testing.T, status string) structs.CheckServiceNodes {
+	return structs.CheckServiceNodes{
+		structs.CheckServiceNode{
+			Node: &structs.Node{
+				ID:         "test1",
+				Node:       "test1",
+				Address:    "10.10.1.1",
+				Datacenter: "dc1",
+			},
+			Service: structs.TestNodeService(t),
+			Checks: structs.HealthChecks{
+				&structs.HealthCheck{
+					Node:        "test1",
+					ServiceName: "web",
+					Name:        "force",
+					Status:      status,
+				},
+			},
+		},
+		structs.CheckServiceNode{
+			Node: &structs.Node{
+				ID:         "test2",
+				Node:       "test2",
+				Address:    "10.10.1.2",
+				Datacenter: "dc1",
+			},
+			Service: structs.TestNodeService(t),
+			Checks: structs.HealthChecks{
+				&structs.HealthCheck{
+					Node:        "test2",
+					ServiceName: "web",
+					Name:        "force",
+					Status:      status,
+				},
+			},
+		},
+	}
+}
+
 func TestUpstreamNodesDC2(t testing.T) structs.CheckServiceNodes {
 	return structs.CheckServiceNodes{
 		structs.CheckServiceNode{
@@ -440,6 +479,14 @@ func TestConfigSnapshotDiscoveryChainWithFailover(t testing.T) *ConfigSnapshot {
 	return testConfigSnapshotDiscoveryChain(t, "failover")
 }
 
+func TestConfigSnapshotDiscoveryChainWithFailoverThroughRemoteGateway(t testing.T) *ConfigSnapshot {
+	return testConfigSnapshotDiscoveryChain(t, "failover-through-remote-gateway")
+}
+
+func TestConfigSnapshotDiscoveryChainWithFailoverThroughRemoteGatewayTriggered(t testing.T) *ConfigSnapshot {
+	return testConfigSnapshotDiscoveryChain(t, "failover-through-remote-gateway-triggered")
+}
+
 func TestConfigSnapshotDiscoveryChain_SplitterWithResolverRedirectMultiDC(t testing.T) *ConfigSnapshot {
 	return testConfigSnapshotDiscoveryChain(t, "splitter-with-resolver-redirect-multidc")
 }
@@ -481,6 +528,28 @@ func testConfigSnapshotDiscoveryChain(t testing.T, variation string, additionalE
 				Failover: map[string]structs.ServiceResolverFailover{
 					"*": {
 						Service: "fail",
+					},
+				},
+			},
+		)
+	case "failover-through-remote-gateway-triggered":
+		fallthrough
+	case "failover-through-remote-gateway":
+		entries = append(entries,
+			&structs.ServiceConfigEntry{
+				Kind: structs.ServiceDefaults,
+				Name: "db",
+				MeshGateway: structs.MeshGatewayConfig{
+					Mode: structs.MeshGatewayModeRemote,
+				},
+			},
+			&structs.ServiceResolverConfigEntry{
+				Kind:           structs.ServiceResolver,
+				Name:           "db",
+				ConnectTimeout: 33 * time.Second,
+				Failover: map[string]structs.ServiceResolverFailover{
+					"*": {
+						Datacenters: []string{"dc2"},
 					},
 				},
 			},
@@ -542,7 +611,7 @@ func testConfigSnapshotDiscoveryChain(t testing.T, variation string, additionalE
 		entries = append(entries, additionalEntries...)
 	}
 
-	dbChain := discoverychain.TestCompileConfigEntries(t, "db", "default", "dc1", compileSetup, entries...)
+	dbChain := discoverychain.TestCompileConfigEntries(t, "db", "default", "dc1", "dc1", compileSetup, entries...)
 
 	dbTarget := structs.DiscoveryTarget{
 		Service:    "db",
@@ -553,6 +622,11 @@ func testConfigSnapshotDiscoveryChain(t testing.T, variation string, additionalE
 		Service:    "fail",
 		Namespace:  "default",
 		Datacenter: "dc1",
+	}
+	failTargetDC2 := structs.DiscoveryTarget{
+		Service:    "db",
+		Namespace:  "default",
+		Datacenter: "dc2",
 	}
 
 	snap := &ConfigSnapshot{
@@ -592,6 +666,13 @@ func testConfigSnapshotDiscoveryChain(t testing.T, variation string, additionalE
 	case "failover":
 		snap.ConnectProxy.WatchedUpstreamEndpoints["db"][failTarget] =
 			TestUpstreamNodesAlternate(t)
+	case "failover-through-remote-gateway-triggered":
+		snap.ConnectProxy.WatchedUpstreamEndpoints["db"][dbTarget] =
+			TestUpstreamNodesInStatus(t, "critical")
+		fallthrough
+	case "failover-through-remote-gateway":
+		snap.ConnectProxy.WatchedUpstreamEndpoints["db"][failTargetDC2] =
+			TestGatewayNodesDC2(t)
 	case "splitter-with-resolver-redirect-multidc":
 		dbTarget_v1_dc1 := structs.DiscoveryTarget{
 			Service:       "db",

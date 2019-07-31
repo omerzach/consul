@@ -63,7 +63,7 @@ func TestManager_BasicLifecycle(t *testing.T) {
 		Datacenter:    "dc1",
 	}
 	dbDefaultChain := func() *structs.CompiledDiscoveryChain {
-		return discoverychain.TestCompileConfigEntries(t, "db", "default", "dc1",
+		return discoverychain.TestCompileConfigEntries(t, "db", "default", "dc1", "dc1",
 			func(req *discoverychain.CompileRequest) {
 				// This is because structs.TestUpstreams uses an opaque config
 				// to override connect timeouts.
@@ -76,7 +76,7 @@ func TestManager_BasicLifecycle(t *testing.T) {
 		)
 	}
 	dbSplitChain := func() *structs.CompiledDiscoveryChain {
-		return discoverychain.TestCompileConfigEntries(t, "db", "default", "dc1",
+		return discoverychain.TestCompileConfigEntries(t, "db", "default", "dc1", "dc1",
 			func(req *discoverychain.CompileRequest) {
 				// This is because structs.TestUpstreams uses an opaque config
 				// to override connect timeouts.

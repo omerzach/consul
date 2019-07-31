@@ -38,10 +38,11 @@ func TestCompile(t *testing.T) {
 		"service redirect":                                 testcase_ServiceRedirect(),
 		"service and subset redirect":                      testcase_ServiceAndSubsetRedirect(),
 		"datacenter redirect":                              testcase_DatacenterRedirect(),
+		"datacenter redirect with mesh gateways":           testcase_DatacenterRedirect_WithMeshGateways(),
 		"service failover":                                 testcase_ServiceFailover(),
 		"service and subset failover":                      testcase_ServiceAndSubsetFailover(),
 		"datacenter failover":                              testcase_DatacenterFailover(),
-		"service failover with mesh gateways":              testcase_ServiceFailover_WithMeshGateways(),
+		"datacenter failover with mesh gateways":           testcase_DatacenterFailover_WithMeshGateways(),
 		"noop split to resolver with default subset":       testcase_NoopSplit_WithDefaultSubset(),
 		"resolver with default subset":                     testcase_Resolve_WithDefaultSubset(),
 		"resolver with no entries and inferring defaults":  testcase_DefaultResolver(),
@@ -90,6 +91,7 @@ func TestCompile(t *testing.T) {
 				ServiceName:       "main",
 				CurrentNamespace:  "default",
 				CurrentDatacenter: "dc1",
+				UseInDatacenter:   "dc1",
 				Entries:           tc.entries,
 			}
 			if tc.setup != nil {
@@ -984,6 +986,52 @@ func testcase_DatacenterRedirect() compileTestCase {
 	return compileTestCase{entries: entries, expect: expect}
 }
 
+func testcase_DatacenterRedirect_WithMeshGateways() compileTestCase {
+	entries := newEntries()
+	entries.GlobalProxy = &structs.ProxyConfigEntry{
+		Kind: structs.ProxyDefaults,
+		Name: structs.ProxyConfigGlobal,
+		MeshGateway: structs.MeshGatewayConfig{
+			Mode: structs.MeshGatewayModeRemote,
+		},
+	}
+	entries.AddResolvers(
+		&structs.ServiceResolverConfigEntry{
+			Kind: "service-resolver",
+			Name: "main",
+			Redirect: &structs.ServiceResolverRedirect{
+				Datacenter: "dc9",
+			},
+		},
+	)
+
+	resolver := entries.GetResolver("main")
+
+	expect := &structs.CompiledDiscoveryChain{
+		Protocol:  "tcp",
+		StartNode: "resolver:main,,,dc9",
+		Nodes: map[string]*structs.DiscoveryGraphNode{
+			"resolver:main,,,dc9": &structs.DiscoveryGraphNode{
+				Type: structs.DiscoveryGraphNodeTypeResolver,
+				Name: "main,,,dc9",
+				Resolver: &structs.DiscoveryResolver{
+					Definition:     resolver,
+					ConnectTimeout: 5 * time.Second,
+					Target:         newTarget("main", "", "default", "dc9"),
+				},
+			},
+		},
+		Targets: map[structs.DiscoveryTarget]structs.DiscoveryTargetConfig{
+			newTarget("main", "", "default", "dc9"): structs.DiscoveryTargetConfig{
+				MeshGateway: structs.MeshGatewayConfig{
+					Mode: structs.MeshGatewayModeRemote,
+				},
+			},
+		},
+	}
+	return compileTestCase{entries: entries, expect: expect}
+}
+
 func testcase_ServiceFailover() compileTestCase {
 	entries := newEntries()
 	entries.AddResolvers(
@@ -1125,7 +1173,7 @@ func testcase_DatacenterFailover() compileTestCase {
 	return compileTestCase{entries: entries, expect: expect}
 }
 
-func testcase_ServiceFailover_WithMeshGateways() compileTestCase {
+func testcase_DatacenterFailover_WithMeshGateways() compileTestCase {
 	entries := newEntries()
 	entries.GlobalProxy = &structs.ProxyConfigEntry{
 		Kind: structs.ProxyDefaults,
@@ -1139,13 +1187,12 @@ func testcase_ServiceFailover_WithMeshGateways() compileTestCase {
 			Kind: "service-resolver",
 			Name: "main",
 			Failover: map[string]structs.ServiceResolverFailover{
-				"*": {Service: "backup"},
+				"*": {Datacenters: []string{"dc2", "dc4"}},
 			},
 		},
 	)
 
 	resolverMain := entries.GetResolver("main")
-
 	wildFail := resolverMain.Failover["*"]
 
 	expect := &structs.CompiledDiscoveryChain{
@@ -1162,19 +1209,21 @@ func testcase_ServiceFailover_WithMeshGateways() compileTestCase {
 					Failover: &structs.DiscoveryFailover{
 						Definition: &wildFail,
 						Targets: []structs.DiscoveryTarget{
-							newTarget("backup", "", "default", "dc1"),
+							newTarget("main", "", "default", "dc2"),
+							newTarget("main", "", "default", "dc4"),
 						},
 					},
 				},
 			},
 		},
 		Targets: map[structs.DiscoveryTarget]structs.DiscoveryTargetConfig{
-			newTarget("backup", "", "default", "dc1"): structs.DiscoveryTargetConfig{
+			newTarget("main", "", "default", "dc1"): structs.DiscoveryTargetConfig{},
+			newTarget("main", "", "default", "dc2"): structs.DiscoveryTargetConfig{
 				MeshGateway: structs.MeshGatewayConfig{
 					Mode: structs.MeshGatewayModeRemote,
 				},
 			},
-			newTarget("main", "", "default", "dc1"): structs.DiscoveryTargetConfig{
+			newTarget("main", "", "default", "dc4"): structs.DiscoveryTargetConfig{
 				MeshGateway: structs.MeshGatewayConfig{
 					Mode: structs.MeshGatewayModeRemote,
 				},
@@ -1304,11 +1353,8 @@ func testcase_DefaultResolver_WithProxyDefaults() compileTestCase {
 			},
 		},
 		Targets: map[structs.DiscoveryTarget]structs.DiscoveryTargetConfig{
-			newTarget("main", "", "default", "dc1"): structs.DiscoveryTargetConfig{
-				MeshGateway: structs.MeshGatewayConfig{
-					Mode: structs.MeshGatewayModeRemote,
-				},
-			},
+			// mesh gateway mode is stripped because we are sharing a dc
+			newTarget("main", "", "default", "dc1"): structs.DiscoveryTargetConfig{},
 		},
 	}
 	return compileTestCase{entries: entries, expect: expect, expectIsDefault: true}

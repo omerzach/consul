@@ -44,6 +44,24 @@ type CompiledDiscoveryChain struct {
 	Targets map[DiscoveryTarget]DiscoveryTargetConfig `json:",omitempty"`
 }
 
+func (c *CompiledDiscoveryChain) WillFailoverThroughMeshGateway(node *DiscoveryGraphNode) bool {
+	if node.Type != DiscoveryGraphNodeTypeResolver {
+		return false
+	}
+	failover := node.Resolver.Failover
+
+	if failover != nil && len(failover.Targets) > 0 {
+		for _, failTarget := range failover.Targets {
+			failTargetConfig := c.Targets[failTarget]
+			switch failTargetConfig.MeshGateway.Mode {
+			case MeshGatewayModeLocal, MeshGatewayModeRemote:
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // IsDefault returns true if the compiled chain represents no routing, no
 // splitting, and only the default resolution.  We have to be careful here to
 // avoid returning "yep this is default" when the only resolver action being

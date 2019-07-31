@@ -587,13 +587,7 @@ func (s *state) resetWatchesFromChain(
 
 		ctx, cancel := context.WithCancel(s.ctx)
 
-		// TODO (mesh-gateway)- maybe allow using a gateway within a datacenter at some point
-		meshGateway := structs.MeshGatewayModeDefault
-		if target.Datacenter != s.source.Datacenter {
-			meshGateway = targetConfig.MeshGateway.Mode
-		}
-
-		// if the default mode
+		meshGateway := targetConfig.MeshGateway.Mode
 		if meshGateway == structs.MeshGatewayModeDefault {
 			meshGateway = structs.MeshGatewayModeNone
 		}

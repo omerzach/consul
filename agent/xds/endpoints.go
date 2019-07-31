@@ -81,6 +81,26 @@ func (s *Server) endpointsFromSnapshotConnectProxy(cfgSnap *proxycfg.ConfigSnaps
 				failover := node.Resolver.Failover
 				target := node.Resolver.Target
 
+				sni := TargetSNI(target, cfgSnap)
+				clusterName := CustomizeClusterName(sni, chain)
+
+				// Determine if we have to generate the entire cluster differently.
+				failoverThroughMeshGateway := chain.WillFailoverThroughMeshGateway(node)
+
+				if failoverThroughMeshGateway {
+					actualTarget := firstHealthyTarget(
+						chain.Targets,
+						chainEndpointMap,
+						target,
+						failover.Targets,
+					)
+					if actualTarget != target {
+						target = actualTarget
+					}
+
+					failover = nil
+				}
+
 				endpoints, ok := chainEndpointMap[target]
 				if !ok {
 					continue // skip the cluster (should not happen)
@@ -128,9 +148,6 @@ func (s *Server) endpointsFromSnapshotConnectProxy(cfgSnap *proxycfg.ConfigSnaps
 				} else {
 					endpointGroups = append(endpointGroups, primaryGroup)
 				}
-
-				sni := TargetSNI(target, cfgSnap)
-				clusterName := CustomizeClusterName(sni, chain)
 
 				la := makeLoadAssignment(
 					clusterName,
@@ -254,33 +271,9 @@ func makeLoadAssignment(
 		for _, ep := range endpoints {
 			// TODO (mesh-gateway) - should we respect the translate_wan_addrs configuration here or just always use the wan for cross-dc?
 			addr, port := ep.BestAddress(localDatacenter != ep.Node.Datacenter)
-			healthStatus := envoycore.HealthStatus_HEALTHY
-			weight := 1
-			if ep.Service.Weights != nil {
-				weight = ep.Service.Weights.Passing
-			}
 
-			for _, chk := range ep.Checks {
-				if chk.Status == api.HealthCritical {
-					healthStatus = envoycore.HealthStatus_UNHEALTHY
-				}
-				if endpointGroup.OnlyPassing && chk.Status != api.HealthPassing {
-					healthStatus = envoycore.HealthStatus_UNHEALTHY
-				}
-				if chk.Status == api.HealthWarning && ep.Service.Weights != nil {
-					weight = ep.Service.Weights.Warning
-				}
-			}
-			// Make weights fit Envoy's limits. A zero weight means that either Warning
-			// (likely) or Passing (weirdly) weight has been set to 0 effectively making
-			// this instance unhealthy and should not be sent traffic.
-			if weight < 1 {
-				healthStatus = envoycore.HealthStatus_UNHEALTHY
-				weight = 1
-			}
-			if weight > 128 {
-				weight = 128
-			}
+			healthStatus, weight := calculateEndpointHealthAndWeight(ep, endpointGroup.OnlyPassing)
+
 			es = append(es, envoyendpoint.LbEndpoint{
 				HostIdentifier: &envoyendpoint.LbEndpoint_Endpoint{
 					Endpoint: &envoyendpoint.Endpoint{
@@ -299,4 +292,38 @@ func makeLoadAssignment(
 	}
 
 	return cla
+}
+
+func calculateEndpointHealthAndWeight(
+	ep structs.CheckServiceNode,
+	onlyPassing bool,
+) (envoycore.HealthStatus, int) {
+	healthStatus := envoycore.HealthStatus_HEALTHY
+	weight := 1
+	if ep.Service.Weights != nil {
+		weight = ep.Service.Weights.Passing
+	}
+
+	for _, chk := range ep.Checks {
+		if chk.Status == api.HealthCritical {
+			healthStatus = envoycore.HealthStatus_UNHEALTHY
+		}
+		if onlyPassing && chk.Status != api.HealthPassing {
+			healthStatus = envoycore.HealthStatus_UNHEALTHY
+		}
+		if chk.Status == api.HealthWarning && ep.Service.Weights != nil {
+			weight = ep.Service.Weights.Warning
+		}
+	}
+	// Make weights fit Envoy's limits. A zero weight means that either Warning
+	// (likely) or Passing (weirdly) weight has been set to 0 effectively making
+	// this instance unhealthy and should not be sent traffic.
+	if weight < 1 {
+		healthStatus = envoycore.HealthStatus_UNHEALTHY
+		weight = 1
+	}
+	if weight > 128 {
+		weight = 128
+	}
+	return healthStatus, weight
 }
